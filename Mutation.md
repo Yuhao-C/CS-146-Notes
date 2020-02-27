@@ -27,6 +27,7 @@
     - [Array (C)](#array-c)
     - [Pointer Arithmetic](#pointer-arithmetic)
   - [(Closer to) Real Memory Layout](#closer-to-real-memory-layout)
+    - [Stack](#stack)
 
 ***
 
@@ -1027,8 +1028,8 @@ We know that Racket achieve this. It allocates space for the posn (for the 2 poi
 #include <stdlib.h>
 
 struct Posn {
-  int *x;
-  int *y;
+  int* x;
+  int* y;
 }
 
 struct Posn makePosn(int x, int y) {
@@ -1043,7 +1044,7 @@ struct Posn makePosn(int x, int y) {
 
 ## (Closer to) Real Memory Layout
 
-applies to C and racket
+Applies to C and racket
 
 RAM
 
@@ -1072,3 +1073,230 @@ Racket lists are stacks!
 - pop = cdr
 - top = car
 - empty = empty?
+
+### Stack
+
+Programs Stack stores local variables
+
+Example:
+
+```C
+int fact(int n) {
+  int res = 0;
+  if (n == 0) return 1;
+  res = fact(n-1);
+  return n * res;
+}
+```
+
+Each function calls gets a stack frame
+
+- local variables are pushed onto the stack
+- also return addresses - where the function goes when it returns
+- each invocation of a function gets its own stack frame
+
+When a function returns its stack frame is popped
+
+- all local variables are released
+- not typically erased
+- "top-of-stack" pointer is moved to top of next frame
+
+```C
+int main() {
+  struct Posn p = makePosn(3, 4);
+  // other operations
+  printf("%d %d", p.x, p.y); // does not print "3 4"
+}
+```
+
+We solved this problem with `malloc`
+
+- `malloc(n)` gives us a pointer to a cointiguous block of memory in the heap of n bytes
+- heap has arbitrarily long lifetime (length of the program by default)
+- if heap allocated data never goes away, eventually tour program will run out of memory. Even if you are not using most of the data anymore.
+
+We know Racket's `make-posn` does the same thing. Racket's solution is a runtime process called a garbage collector that detects data that's no longer in use and releases it.
+
+e.g.
+
+```scheme
+(define (f x)
+  (local [(define p (posn 3 4))] ;; not needed after f returns
+  ......  
+))
+;; automatically released
+```
+
+C solution: Heap memory is freed when you say so.
+
+```C
+int *p = malloc(...);
+// operations ...
+free(p);
+```
+
+Failing to free all allocated memory is called a memory leak
+
+Programs that leak memory will crash if run long enough.
+
+Consider
+
+```C
+int *p = malloc(sizeof(int));
+free(p);
+*p = 7; //will this crash?
+```
+
+Probably not:
+
+- `free(p)` does not change p
+- p still points at that memory
+- but p is not pointing to a valid location - that location may be assigned again to another pointer by another malloc call.
+- called a dangling pointer - BAD
+
+Better Solution: After `free(p)`, assign it to a guaranteed non-valid location (force dereferencing p to crash)
+
+```C
+int *p = malloc(sizeof(int));
+free(p);
+p = NULL;
+```
+
+NULL
+
+- not really part of the C language
+- defined as a constant equal to `0`
+- could equally say `p = 0`;
+
+Dereferencing NULL
+
+- undefined behaviou
+- program may crash
+
+if malloc failes to allocate memory, it returns NULL
+
+Consider
+
+```C
+int* f() {
+  int x = 4;
+  return &x;
+}
+
+int g() {
+  int y = 5;
+  return y;
+}
+
+int main() {
+  int* p = f(); // dangling pointers
+  g();
+  printf("%d\n", *p);
+}
+```
+
+***NEVER*** return a pointer to a local variable
+
+If you want to return a pointer it should be to static, heap allocated, or non-local stack data.
+
+```C
+int* pickOne(int* x, int* y) {
+  return ____ ? x : y;
+}
+
+int main() {
+  int *p = malloc(sizeof(int));
+  int x = 5;
+  *p = 10;
+  int* g = &x;
+  int* z = pickOne(p, g);
+}
+```
+
+When to use a heap:
+
+- for data that should outlive the fn that creates it
+- for data whose size is not know at compile time
+- for large local arrays
+
+```C
+int numSlotsNeeded;
+scanf("%d", &numSlotsNeeded);
+int* p = malloc(sizeof(int) * numSlotsNeeded); // an array on the heap of size numSlotsNeeded
+// can access p[0] ... p[numSlotsNeeded-1]
+// dynamic array (heap allocated)
+...
+free(p)
+```
+
+Programs usually have more heap memory available than stack memory
+
+```C
+int recursiveFn(int n) {
+  int tempArray[10000]; // eats up our stack memory
+  // use heap array instead
+  ...
+  recursiveFn(n-1);
+}
+```
+
+C array mimic Racket vectors. Can we get the behaviour of racket lists?
+
+`(cons x y)` => produces a pair
+
+Racket is dynamically typed - list items can have different types - stored as pointers in the list
+
+C is statically typed - list items would need to have the same type - so no real need for the values to be pointers
+
+```C
+// linked list
+struct Node {
+  int data;
+  struct Node* next;
+}
+
+strcut Node* cons(int data, struct Node* lst) {
+  struct Node* result = malloc(sizeof(Node));
+  result->data = data;
+  result->next = lst;
+  return result;
+}
+
+int length(struct Node* lst) {
+  if (!lst) return 0;
+  return 1 + length(lst->next);
+}
+
+// f is a function pointer to a function that takes one int parameter and returns a int
+struct Node* map(int (*f)(int), struct Node* lst) {
+  if (!lst->next) {
+    return NULL;
+  }
+  return cons(f(lst->data), map(f, lst->next));
+}
+
+int main() {
+  struct Node* l = cons(4, cons(3, cons(2, 0)));
+
+  // WRONG! Only frees the first node
+  free(l);
+
+  //Correct Version
+  for (struct Node* p = l; p != NULL) {
+    struct Node* temp = p->next;
+    free(p);
+    p = temp;
+  }
+
+  //Or recursively
+  freeList(l);
+}
+
+void freeList(struct Node* lst) {
+  if (lst == NULL) {
+    return;
+  }
+  freeList(lst->next);
+  free(lst);
+}
+```

@@ -5,7 +5,7 @@
   - [Second Version](#second-version)
   - [Third Version](#third-version)
 
-***
+---
 
 ## First Attempt
 
