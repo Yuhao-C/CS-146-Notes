@@ -1,6 +1,20 @@
 # *ADT*s (**A**bstract **D**ata **T**ype) in C
 
-C doesn't have modules - C has files
+- [*ADT*s (**A**bstract **D**ata **T**ype) in C](#adts-abstract-data-type-in-c)
+  - [Implement ADT Sequence in C](#implement-adt-sequence-in-c)
+    - [Operations](#operations)
+    - [Implementation options](#implementation-options)
+    - [Approach: partially-filled heap array](#approach-partially-filled-heap-array)
+    - [Prevent tampering/forgery](#prevent-tamperingforgery)
+    - [What happens when the array is full](#what-happens-when-the-array-is-full)
+      - [Helper function](#helper-function)
+      - [`realloc()`](#realloc)
+      - [Amortized Analysis](#amortized-analysis)
+  - [Application of Vectors](#application-of-vectors)
+    - [ADT Map/Dictionary (Mutable version)](#adt-mapdictionary-mutable-version)
+
+---
+> C doesn't have modules - C has files
 
 ## Implement ADT Sequence in C
 
@@ -130,7 +144,7 @@ struct Sequence {
 
 #include "sequence.h"
 int main() {
-  struct Sequence s; 
+  struct Sequence s;
   // ✗: compiler doesn't know enough about Sequence (needs size!)
   ...
 }
@@ -171,7 +185,7 @@ int main() {
 }
 ```
 
-### What happens when the array is full?
+### What happens when the array is full
 
 ```c
 void increaseCap(Sequence s) {
@@ -213,6 +227,7 @@ static void increaseCap(Sequence s) { ... }
 ```
 
 `static` function
+
 - means only visible in this file
 - prevents other files from having access, even if they write their own header
 
@@ -241,13 +256,14 @@ places a bound on a **sequence** of operations, even if an **individual** operat
 
 If an array has a `cap` of $k$ and is empty
 
-| Operation | `cap` | Steps |
-| --------- | ----- | ----- |
-| $k$ inserts cost of $1$ each   | $k$  | $k$ steps    |
-| $1$ insert costs $k+1$         | $2k$ | $k+1$ steps  |
-| $k-1$ inserts cost of $1$ each |      | $k-1$ steps  |
-| $1$ insert costs $2k+1$        | $4k$ | $2k+1$ steps |
-| $2k-1$ inserts cost $1$ each   |      | $2k-1$ steps |
+| Operation                      | `cap` | Steps        |
+| ------------------------------ | ----- | ------------ |
+| $k$ inserts cost of $1$ each   | $k$   | $k$ steps    |
+| $1$ insert costs $k+1$         | $2k$  | $k+1$ steps  |
+| $k-1$ inserts cost of $1$ each |       | $k-1$ steps  |
+| $1$ insert costs $2k+1$        | $4k$  | $2k+1$ steps |
+| $2k-1$ inserts cost $1$ each   |       | $2k-1$ steps |
+
 - $1$ insert costs $4k+1$, ($4k+1$ steps) - `cap` now $8k$
 - ...
 - $2^{j-1}k-1$ inserts cost $1$ each ($2^{j-1}k-1$ steps)
